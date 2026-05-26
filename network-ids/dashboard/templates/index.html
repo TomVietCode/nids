@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NIDS Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+
+<body>
+  <header>
+    <h1>Network Intrusion Detection System</h1>
+    <span id="status" class="status-dot" title="WebSocket status"></span>
+  </header>
+
+  <main>
+    <section class="grid">
+      <!-- DSH-01 -->
+      <div class="card">
+        <h2>Traffic (pkts/sec, last 60s)</h2>
+        <canvas id="trafficChart" height="120"></canvas>
+      </div>
+
+      <!-- DSH-04 -->
+      <div class="card">
+        <h2>Protocol distribution (last 5 min)</h2>
+        <canvas id="protocolChart" height="120"></canvas>
+      </div>
+
+      <!-- DSH-02 -->
+      <div class="card span-2">
+        <h2>Live alerts</h2>
+        <ul id="alertFeed" class="alert-feed"></ul>
+      </div>
+
+      <!-- DSH-03 -->
+      <div class="card span-2">
+        <h2>Threat heatmap (weekday x hour)</h2>
+        <div id="heatmap" class="heatmap"></div>
+      </div>
+
+      <!-- RES-03 -->
+      <div class="card span-2">
+        <h2>IP list (whitelist / blacklist)</h2>
+        <form id="iplistForm">
+          <input name="ip" placeholder="192.168.1.100" required />
+          <select name="type">
+            <option value="whitelist">whitelist</option>
+            <option value="blacklist">blacklist</option>
+          </select>
+          <input name="reason" placeholder="reason (optional)" />
+          <button type="submit">Add / Update</button>
+        </form>
+        <table id="iplistTable">
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>Type</th>
+              <th>Added</th>
+              <th>Reason</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- DSH-05 -->
+      <div class="card span-2">
+        <h2>Packet log</h2>
+        <form id="logFilters">
+          <input name="ip" placeholder="src IP" />
+          <select name="proto">
+            <option value="">All protocols</option>
+            <option>TCP</option>
+            <option>UDP</option>
+            <option>ICMP</option>
+            <option>ARP</option>
+            <option>OTHER</option>
+          </select>
+          <button type="submit">Apply</button>
+          <a id="csvExport" class="btn-link" href="/api/logs/export.csv" download>Export CSV</a>
+        </form>
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Src</th>
+              <th>Dst</th>
+              <th>Proto</th>
+              <th>Sport</th>
+              <th>Dport</th>
+              <th>Bytes</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="pager">
+          <button id="prevPage">Prev</button>
+          <span id="pageInfo"></span>
+          <button id="nextPage">Next</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+</body>
+
+</html>
