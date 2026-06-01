@@ -32,7 +32,7 @@ class Responder:
         self._blocked: set[str] = set()
         self._rate_limited: set[str] = set()
         self._lock = threading.Lock()
-        self._reapply_blacklist_on_boot()Z
+        self._reapply_blacklist_on_boot()
 
     # ------------------------------------------------------------------
     # Public entrypoint (called by sniffer thread)
