@@ -10,8 +10,8 @@ db/database.py, api/*, main.py.
 # ---------------------------------------------------------------------------
 # Network / server
 # ---------------------------------------------------------------------------
-NETWORK_INTERFACE = "eth0"
-VPS_IP = "152.42.209.91"  # used to filter self-traffic in sniffer + analyzer
+NETWORK_INTERFACE = "ens33"
+VPS_IP = "192.168.68.128"  # used to filter self-traffic in sniffer + analyzer
 IGNORE_IPS = {VPS_IP}     # secondary Python-level filter for known benign IPs
 FLASK_HOST = "0.0.0.0"
 FLASK_PORT = 5000
