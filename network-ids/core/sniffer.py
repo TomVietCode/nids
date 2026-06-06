@@ -56,10 +56,24 @@ class PacketSniffer:
     # capture loop
     # ------------------------------------------------------------------
     def _capture_loop(self) -> None:
-        # Exclude Flask port and VPS's own outbound traffic at the kernel
-        # level (most efficient). ARP packets are unaffected because the
-        # "src host" filter only applies to the IP header.
-        bpf = f"not port 5000 and not src host {config.VPS_IP}"
+        # BPF filter chạy ở kernel level (hiệu quả nhất, trước khi vào Python).
+        # Loại bỏ:
+        #   - port Flask (5000) để tránh log traffic API của chính mình
+        #   - traffic đi ra từ VM (src = VPS_IP) vì ta chỉ monitor inbound threats
+        #   - các UDP port hệ thống: NTP(123), mDNS(5353), SSDP(1900), Spotify(57621)
+        #   - multicast/broadcast destination không phải threat thật
+        noise_udp = " or ".join(
+            f"udp port {p}" for p in config.IGNORE_UDP_PORTS
+        )
+        noise_dst = " or ".join(
+            f"dst host {ip}" for ip in config.IGNORE_DST_IPS
+        )
+        bpf = (
+            f"not port {config.FLASK_PORT}"
+            f" and not src host {config.VPS_IP}"
+            f" and not ({noise_udp})"
+            f" and not ({noise_dst})"
+        )
         sniff(
             iface=config.NETWORK_INTERFACE,
             filter=bpf,
@@ -73,8 +87,17 @@ class PacketSniffer:
         if meta is None:
             return
 
-        # Secondary Python-level filter for known benign IPs (belt-and-suspenders)
+        # Python-level filter (belt-and-suspenders sau BPF).
+        # Lọc theo src IP (gateway VMware, chính VM) và dst IP (multicast/broadcast).
         if meta["src_ip"] in config.IGNORE_IPS:
+            return
+        if meta["dst_ip"] in config.IGNORE_DST_IPS:
+            return
+        # Bỏ qua UDP noise port nếu BPF không catch được (ví dụ ARP encapsulated)
+        if (
+            meta["protocol"] == "UDP"
+            and meta.get("dst_port") in config.IGNORE_UDP_PORTS
+        ):
             return
 
         # Detection (synchronous, in-memory; O(1) per packet)
