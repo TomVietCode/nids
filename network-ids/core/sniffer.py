@@ -56,9 +56,13 @@ class PacketSniffer:
     # capture loop
     # ------------------------------------------------------------------
     def _capture_loop(self) -> None:
+        # Exclude Flask port and VPS's own outbound traffic at the kernel
+        # level (most efficient). ARP packets are unaffected because the
+        # "src host" filter only applies to the IP header.
+        bpf = f"not port 5000 and not src host {config.VPS_IP}"
         sniff(
             iface=config.NETWORK_INTERFACE,
-            filter="not port 5000",
+            filter=bpf,
             prn=self._handle,
             store=False,
             stop_filter=lambda _p: self._stop.is_set(),
@@ -67,6 +71,10 @@ class PacketSniffer:
     def _handle(self, pkt: Packet) -> None:
         meta = self._extract_meta(pkt)
         if meta is None:
+            return
+
+        # Secondary Python-level filter for known benign IPs (belt-and-suspenders)
+        if meta["src_ip"] in config.IGNORE_IPS:
             return
 
         # Detection (synchronous, in-memory; O(1) per packet)

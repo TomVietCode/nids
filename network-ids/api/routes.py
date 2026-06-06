@@ -197,7 +197,20 @@ def delete_iplist(ip: str):
         row = s.scalar(select(IPList).where(IPList.ip_address == ip))
         if not row:
             return jsonify({"error": "not found"}), 404
+        was_blacklisted = row.list_type == "blacklist"
         s.delete(row)
+
+    # Sync iptables: remove the DROP rule if this was a blacklisted IP
+    if was_blacklisted:
+        import subprocess
+        try:
+            subprocess.run(
+                ["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True, text=True, check=False,
+            )
+        except FileNotFoundError:
+            pass  # iptables not available (e.g., dev environment)
+
     return jsonify({"ok": True})
 
 

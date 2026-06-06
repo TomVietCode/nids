@@ -49,6 +49,9 @@ class Analyzer:
         # Anti-storm: suppress repeat of (src_ip, threat_type) within cooldown
         self._cooldown: dict[tuple[str, str], float] = {}
 
+        # Track IPs with active floods to suppress brute-force during floods
+        self._flood_active: set[str] = set()
+
     # Main entry point for processing packets
     def process(self, pkt, meta: dict) -> list[dict]:
         alerts: list[dict] = []
@@ -118,6 +121,11 @@ class Analyzer:
             return
 
         src = meta["src_ip"]
+
+        # If this IP already has an active flood, skip brute-force detection.
+        # A SYN flood to port 22 shouldn't fire both FLOOD and BRUTE_FORCE.
+        if src in self._flood_active:
+            return
         key = (src, dport)
         dq = self.brute_force[key]
         now = time.time()
@@ -171,14 +179,22 @@ class Analyzer:
         src = meta.get("src_ip")
         if not src:
             return
+
+        # Only count inbound packets (targeting our VPS)
+        if meta.get("dst_ip") != config.VPS_IP:
+            return
+
         bucket = int(time.time())
         state = self.flood_counter[src]
         # Reset counter when we roll into a new 1-second bucket.
         if state[0] != bucket:
             state[0] = bucket
             state[1] = 0
+            # Clear flood-active flag when a new bucket starts below threshold
+            self._flood_active.discard(src)
         state[1] += 1
         if state[1] >= config.FLOOD_PACKET_RATE_THRESHOLD:
+            self._flood_active.add(src)  # suppress brute-force for this IP
             out.append(
                 {
                     "timestamp": datetime.utcnow(),

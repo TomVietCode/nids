@@ -11,6 +11,8 @@ db/database.py, api/*, main.py.
 # Network / server
 # ---------------------------------------------------------------------------
 NETWORK_INTERFACE = "eth0"
+VPS_IP = "152.42.209.91"  # used to filter self-traffic in sniffer + analyzer
+IGNORE_IPS = {VPS_IP}     # secondary Python-level filter for known benign IPs
 FLASK_HOST = "0.0.0.0"
 FLASK_PORT = 5000
 
@@ -25,7 +27,7 @@ PORT_SCAN_WINDOW_SEC = 5
 # ---------------------------------------------------------------------------
 BRUTE_FORCE_THRESHOLD = 20
 BRUTE_FORCE_WINDOW_SEC = 10
-BRUTE_FORCE_PORTS = [22, 21, 80, 443]
+BRUTE_FORCE_PORTS = [22, 21]  # auth-only ports; HTTP floods handled by DET-04
 
 # ---------------------------------------------------------------------------
 # DET-04 Flood / mini-DDoS

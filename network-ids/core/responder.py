@@ -14,6 +14,7 @@ Flow on each alert:
 
 import subprocess
 import threading
+from datetime import datetime
 from typing import Callable, Optional
 
 from sqlalchemy import select
@@ -49,7 +50,8 @@ class Responder:
 
         severity = alert["severity"]
         if list_type == "blacklist" or severity in config.AUTO_BLOCK_SEVERITIES:
-            self._apply_block(alert["src_ip"])
+            reason = f"auto-blocked: {severity} {alert.get('threat_type', '')}"
+            self._apply_block(alert["src_ip"], reason=reason)
         elif severity in config.RATE_LIMIT_SEVERITIES:
             self._apply_rate_limit(alert["src_ip"])
 
@@ -94,7 +96,7 @@ class Responder:
     # ------------------------------------------------------------------
     # Firewall actions
     # ------------------------------------------------------------------
-    def _apply_block(self, ip: str) -> None:
+    def _apply_block(self, ip: str, reason: str = "auto-blocked") -> None:
         with self._lock:
             if ip in self._blocked:
                 return
@@ -106,8 +108,10 @@ class Responder:
                 capture_output=True, text=True, check=False,
             )
             if check.returncode != 0:
+                # -I INPUT 1 inserts at the TOP of the chain so this DROP
+                # beats any existing ACCEPT rules (ufw, fail2ban, etc.).
                 subprocess.run(
-                    ["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"],
+                    ["iptables", "-I", "INPUT", "1", "-s", ip, "-j", "DROP"],
                     capture_output=True, text=True, check=True,
                 )
             print(f"[responder] BLOCK {ip}")
@@ -116,24 +120,54 @@ class Responder:
         except subprocess.CalledProcessError as e:
             print(f"[responder] iptables BLOCK {ip} failed: {e.stderr}")
 
+        # Persist to IPList DB so the block is visible on the dashboard
+        # and survives restarts via _reapply_blacklist_on_boot().
+        try:
+            with session_scope() as s:
+                existing = s.scalar(select(IPList).where(IPList.ip_address == ip))
+                if not existing:
+                    s.add(IPList(
+                        ip_address=ip,
+                        list_type="blacklist",
+                        added_at=datetime.utcnow(),
+                        reason=reason,
+                    ))
+        except Exception as e:
+            print(f"[responder] DB write for auto-block {ip} failed: {e}")
+
     def _apply_rate_limit(self, ip: str) -> None:
         with self._lock:
             if ip in self._rate_limited:
                 return
             self._rate_limited.add(ip)
-        rule = [
+        # Two-rule pattern: first rule ACCEPTs packets up to the limit,
+        # second rule DROPs everything else from that IP.
+        accept_rule = [
             "INPUT", "-s", ip,
             "-m", "limit", "--limit", config.RATE_LIMIT_RULE,
+            "--limit-burst", "20",
             "-j", "ACCEPT",
         ]
+        drop_rule = ["INPUT", "-s", ip, "-j", "DROP"]
         try:
-            check = subprocess.run(
-                ["iptables", "-C", *rule],
+            # Insert DROP first (position 1), then ACCEPT at position 1.
+            # Result: ACCEPT at top, DROP right below — correct order.
+            check_drop = subprocess.run(
+                ["iptables", "-C", *drop_rule],
                 capture_output=True, text=True, check=False,
             )
-            if check.returncode != 0:
+            if check_drop.returncode != 0:
                 subprocess.run(
-                    ["iptables", "-A", *rule],
+                    ["iptables", "-I", "INPUT", "1", *drop_rule[1:]],
+                    capture_output=True, text=True, check=True,
+                )
+            check_accept = subprocess.run(
+                ["iptables", "-C", *accept_rule],
+                capture_output=True, text=True, check=False,
+            )
+            if check_accept.returncode != 0:
+                subprocess.run(
+                    ["iptables", "-I", "INPUT", "1", *accept_rule[1:]],
                     capture_output=True, text=True, check=True,
                 )
             print(f"[responder] RATE-LIMIT {ip} ({config.RATE_LIMIT_RULE})")
