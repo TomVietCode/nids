@@ -98,6 +98,14 @@ class Responder:
     # ------------------------------------------------------------------
     # Firewall actions
     # ------------------------------------------------------------------
+    def unblock(self, ip: str) -> None:
+        """Remove IP from in-memory sets so it can be re-blocked on the next alert.
+        Called by the API DELETE /iplist/<ip> route after DB + iptables are cleared.
+        """
+        with self._lock:
+            self.blocked_ips.discard(ip)
+            self._rate_limited.discard(ip)
+
     def _apply_block(self, ip: str, reason: str = "auto-blocked") -> None:
         with self._lock:
             if ip in self.blocked_ips:

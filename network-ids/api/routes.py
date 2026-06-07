@@ -17,7 +17,7 @@ import io
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 from sqlalchemy import func, select
 
 from db.database import session_scope
@@ -219,6 +219,14 @@ def delete_iplist(ip: str):
             )
         except FileNotFoundError:
             pass  # iptables not available (e.g., dev environment)
+
+    # Clear in-memory state so the IP can be re-detected and re-blocked
+    # immediately on the next attack without restarting the server.
+    ext = current_app.extensions
+    if "responder" in ext:
+        ext["responder"].unblock(ip)
+    if "analyzer" in ext:
+        ext["analyzer"].clear_cooldown(ip)
 
     return jsonify({"ok": True})
 

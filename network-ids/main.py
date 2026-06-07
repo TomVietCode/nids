@@ -77,6 +77,10 @@ def main() -> None:
     )
     sniffer.start()
 
+    # Store in app.extensions so API routes can call unblock() / clear_cooldown()
+    app.extensions["responder"] = responder
+    app.extensions["analyzer"] = analyzer
+
     print(f"[NIDS] sniffing on {config.NETWORK_INTERFACE}")
     print(f"[NIDS] dashboard at http://{config.FLASK_HOST}:{config.FLASK_PORT}")
 

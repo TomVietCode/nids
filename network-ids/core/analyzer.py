@@ -67,6 +67,14 @@ class Analyzer:
                 self._detect_arp_spoof(meta, alerts)
         return [a for a in alerts if self._allow(a)]
 
+    # Public: remove all cooldown entries for a given IP so it can be re-detected
+    # immediately after being removed from the blacklist.
+    def clear_cooldown(self, ip: str) -> None:
+        with self._lock:
+            keys_to_del = [k for k in self._cooldown if k[0] == ip]
+            for k in keys_to_del:
+                del self._cooldown[k]
+
     # Anti-storm: suppress repeat of (src_ip, threat_type) within cooldown
     def _allow(self, alert: dict) -> bool:
         key = (alert["src_ip"], alert["threat_type"])
