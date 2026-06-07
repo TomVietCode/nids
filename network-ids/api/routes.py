@@ -62,14 +62,21 @@ def list_logs():
     proto = request.args.get("proto") or None
     start = _parse_dt(request.args.get("start"))
     end = _parse_dt(request.args.get("end"))
+    # Routine traffic filter: hide routine packets by default
+    show_routine = request.args.get("show_routine", "false").lower() == "true"
 
     with session_scope() as s:
         base = _apply_packet_filters(select(PacketLog), ip, proto, start, end)
-        total = s.scalar(
-            _apply_packet_filters(
-                select(func.count(PacketLog.id)), ip, proto, start, end
-            )
-        ) or 0
+        count_base = _apply_packet_filters(
+            select(func.count(PacketLog.id)), ip, proto, start, end
+        )
+
+        # Filter out routine traffic unless explicitly requested
+        if not show_routine:
+            base = base.where(PacketLog.is_routine == False)  # noqa: E712
+            count_base = count_base.where(PacketLog.is_routine == False)  # noqa: E712
+
+        total = s.scalar(count_base) or 0
         rows = s.scalars(
             base.order_by(PacketLog.id.desc())
             .limit(per_page)
@@ -84,6 +91,8 @@ def list_logs():
             "src_port": r.src_port,
             "dst_port": r.dst_port,
             "payload_size": r.payload_size,
+            "is_routine": r.is_routine,
+            "routine_reason": r.routine_reason,
         } for r in rows]
 
     return jsonify({"page": page, "per_page": per_page, "total": total, "items": items})

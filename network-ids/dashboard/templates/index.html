@@ -13,6 +13,10 @@
 <body>
   <header>
     <h1>Network Intrusion Detection System</h1>
+    <nav class="nav-links">
+      <a href="/" class="active">Dashboard</a>
+      <a href="/settings">Settings</a>
+    </nav>
     <span id="status" class="status-dot" title="WebSocket status"></span>
   </header>
 
@@ -27,7 +31,10 @@
       <!-- DSH-04 -->
       <div class="card">
         <h2>Protocol distribution (last 5 min)</h2>
-        <canvas id="protocolChart" height="120"></canvas>
+        <div class="chart-wrapper">
+          <canvas id="protocolChart" height="120"></canvas>
+          <p id="protocolEmpty" class="chart-empty" style="display:none">No data in last 5 minutes</p>
+        </div>
       </div>
 
       <!-- DSH-02 -->
@@ -71,6 +78,10 @@
       <!-- DSH-05 -->
       <div class="card span-2">
         <h2>Packet log</h2>
+        <label class="routine-toggle">
+          <input type="checkbox" id="showRoutine" />
+          <span>Show routine traffic</span>
+        </label>
         <form id="logFilters">
           <input name="ip" placeholder="src IP" />
           <select name="proto">

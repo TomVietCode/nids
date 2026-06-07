@@ -76,6 +76,14 @@ RATE_LIMIT_SEVERITIES = ["MEDIUM"]
 RATE_LIMIT_RULE = "10/min"  # passed to iptables -m limit --limit
 
 # ---------------------------------------------------------------------------
+# Noise filter (routine traffic classification)
+# ---------------------------------------------------------------------------
+FILTER_ARP_BROADCASTS = True          # suppress ARP requests between LAN hosts
+FILTER_PROTOCOLS = ["ARP"]            # protocols to mark as routine in Packet Log
+TRUSTED_LOCAL_SUBNETS = ["192.168.68.0/24"]  # internal/low-risk subnets
+GATEWAY_IPS = ["192.168.68.1", "192.168.68.2"]  # expected gateway traffic
+
+# ---------------------------------------------------------------------------
 # Logging / persistence (LOG-01, LOG-02)
 # ---------------------------------------------------------------------------
 DB_PATH = "db/nids.sqlite"

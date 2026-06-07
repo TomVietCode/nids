@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NIDS Settings</title>
+  <meta name="description" content="Configure NIDS detection thresholds, network parameters, and noise filters" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+
+<body>
+  <header>
+    <h1>Network Intrusion Detection System</h1>
+    <nav class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/settings" class="active">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="settings-page">
+      <div class="settings-header">
+        <h2>System Configuration</h2>
+        <div class="settings-actions">
+          <button id="resetBtn" class="btn-danger" title="Restore all values to factory defaults">
+            Reset to Defaults
+          </button>
+          <button id="saveBtn" class="btn-primary">
+            Save Changes
+          </button>
+        </div>
+      </div>
+
+      <div id="configForm" class="config-sections">
+        <!-- Dynamically populated by settings.js -->
+        <div class="loading-spinner">Loading configuration…</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <script src="/static/js/settings.js"></script>
+</body>
+
+</html>

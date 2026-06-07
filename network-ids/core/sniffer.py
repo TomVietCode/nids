@@ -12,6 +12,7 @@ thread under the sniffer's buffer lock to avoid SQLite contention with the
 Flask request threads.
 """
 
+import ipaddress
 import threading
 import time
 from datetime import datetime
@@ -33,9 +34,16 @@ AlertSink = Callable[[dict], None]
 
 
 class PacketSniffer:
-    def __init__(self, analyzer: Analyzer, alert_sink: Optional[AlertSink] = None) -> None:
+    def __init__(
+        self,
+        analyzer: Analyzer,
+        alert_sink: Optional[AlertSink] = None,
+        blocked_ips: Optional[set] = None,  # tham chiếu đến Responder.blocked_ips
+    ) -> None:
         self.analyzer = analyzer
         self.alert_sink = alert_sink
+        # Dùng set của Responder để biết IP nào đang bị iptables DROP
+        self._blocked_ips: set = blocked_ips if blocked_ips is not None else set()
 
         self._buffer: list[dict] = []
         self._buffer_lock = threading.Lock()
@@ -100,14 +108,29 @@ class PacketSniffer:
         ):
             return
 
-        # Detection (synchronous, in-memory; O(1) per packet)
-        alerts = self.analyzer.process(pkt, meta)
-        if alerts and self.alert_sink:
-            for a in alerts:
-                try:
-                    self.alert_sink(a)
-                except Exception as e:
-                    print(f"[sniffer] alert sink error: {e}")
+        # Kiểm tra xem src_ip có đang bị iptables DROP không.
+        # Nếu có: chỉ log với is_blocked=True, bỏ qua detection —
+        # vì IP này đã xử lý xong, alert thêm chỉ là noise.
+        is_blocked = meta["src_ip"] in self._blocked_ips
+
+        has_alerts = False
+        if not is_blocked:
+            # Detection (synchronous, in-memory; O(1) per packet)
+            alerts = self.analyzer.process(pkt, meta)
+            has_alerts = bool(alerts)
+            if alerts and self.alert_sink:
+                for a in alerts:
+                    try:
+                        self.alert_sink(a)
+                    except Exception as e:
+                        print(f"[sniffer] alert sink error: {e}")
+
+        # Routine traffic classification (Task 4).
+        # Never mark a packet as routine if it triggered an alert.
+        is_routine = False
+        routine_reason = None
+        if not has_alerts and not is_blocked:
+            is_routine, routine_reason = self._classify_routine(meta)
 
         # Logging buffer (LOG-01)
         with self._buffer_lock:
@@ -119,9 +142,61 @@ class PacketSniffer:
                 "src_port": meta.get("src_port"),
                 "dst_port": meta.get("dst_port"),
                 "payload_size": meta["payload_size"],
+                "is_blocked": is_blocked,
+                "is_routine": is_routine,
+                "routine_reason": routine_reason,
             })
             if len(self._buffer) >= config.BULK_INSERT_BATCH_SIZE:
                 self._flush_locked()
+
+    # ------------------------------------------------------------------
+    # routine traffic classification (noise filter)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _classify_routine(meta: dict) -> tuple[bool, Optional[str]]:
+        """Check if a packet is routine/benign background traffic.
+
+        Returns (is_routine, reason_string).
+        This is only called when the packet did NOT trigger any alert.
+        """
+        proto = meta["protocol"]
+        src = meta["src_ip"]
+        dst = meta["dst_ip"]
+
+        # Check 1: Protocol in the suppression list
+        if proto in config.FILTER_PROTOCOLS:
+            # ARP broadcast check
+            if proto == "ARP" and config.FILTER_ARP_BROADCASTS:
+                # ARP to broadcast/gateway is normal LAN behavior
+                if dst in config.GATEWAY_IPS or dst.endswith(".255"):
+                    return True, f"ARP broadcast to {dst} — normal LAN behavior"
+                # ARP between hosts in trusted subnet
+                for subnet_str in config.TRUSTED_LOCAL_SUBNETS:
+                    try:
+                        net = ipaddress.ip_network(subnet_str, strict=False)
+                        if (ipaddress.ip_address(src) in net and
+                                ipaddress.ip_address(dst) in net):
+                            return True, f"ARP within trusted subnet {subnet_str}"
+                    except ValueError:
+                        continue
+            # Non-ARP filtered protocol
+            elif proto in config.FILTER_PROTOCOLS:
+                return True, f"{proto} — filtered protocol"
+
+        # Check 2: Traffic to/from gateway IPs (routine for any protocol)
+        if dst in config.GATEWAY_IPS or src in config.GATEWAY_IPS:
+            for subnet_str in config.TRUSTED_LOCAL_SUBNETS:
+                try:
+                    net = ipaddress.ip_network(subnet_str, strict=False)
+                    src_in = ipaddress.ip_address(src) in net
+                    dst_in = ipaddress.ip_address(dst) in net
+                    if src_in and dst_in:
+                        gw = dst if dst in config.GATEWAY_IPS else src
+                        return True, f"Routine traffic to gateway {gw}"
+                except ValueError:
+                    continue
+
+        return False, None
 
     # ------------------------------------------------------------------
     # parsing

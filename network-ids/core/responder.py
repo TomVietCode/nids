@@ -30,7 +30,9 @@ SocketEmit = Callable[[dict], None]
 class Responder:
     def __init__(self, socket_emit: Optional[SocketEmit] = None) -> None:
         self.socket_emit = socket_emit
-        self._blocked: set[str] = set()
+        # Public set — Sniffer đọc để đánh dấu is_blocked trên packet log.
+        # set.add() và `in` là thread-safe trong CPython (GIL bảo vệ).
+        self.blocked_ips: set[str] = set()
         self._rate_limited: set[str] = set()
         self._lock = threading.Lock()
         self._reapply_blacklist_on_boot()
@@ -98,9 +100,9 @@ class Responder:
     # ------------------------------------------------------------------
     def _apply_block(self, ip: str, reason: str = "auto-blocked") -> None:
         with self._lock:
-            if ip in self._blocked:
+            if ip in self.blocked_ips:
                 return
-            self._blocked.add(ip)
+            self.blocked_ips.add(ip)
         try:
             # iptables -C returns 0 if the rule exists, !=0 otherwise.
             check = subprocess.run(

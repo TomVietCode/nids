@@ -15,6 +15,7 @@ from flask_socketio import SocketIO
 
 import config
 import db.models  # noqa: F401  -- registers ORM models on Base
+from api.config_routes import config_bp
 from api.routes import api_bp
 from api.websocket import attach as attach_websocket
 from core.analyzer import Analyzer
@@ -42,10 +43,15 @@ def create_app() -> tuple[Flask, SocketIO]:
     )
     app.config["SECRET_KEY"] = "nids-midterm-secret"
     app.register_blueprint(api_bp)
+    app.register_blueprint(config_bp)
 
     @app.route("/")
     def index():
         return render_template("index.html")
+
+    @app.route("/settings")
+    def settings():
+        return render_template("settings.html")
 
     socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
     return app, socketio
@@ -64,7 +70,11 @@ def main() -> None:
 
     responder = Responder(socket_emit=emit_alert)
     analyzer = Analyzer()
-    sniffer = PacketSniffer(analyzer=analyzer, alert_sink=responder.handle_alert)
+    sniffer = PacketSniffer(
+        analyzer=analyzer,
+        alert_sink=responder.handle_alert,
+        blocked_ips=responder.blocked_ips,  # dùng chung set, không cần copy/sync
+    )
     sniffer.start()
 
     print(f"[NIDS] sniffing on {config.NETWORK_INTERFACE}")

@@ -10,7 +10,7 @@ SECTION: DATABASE_SCHEMA of PROJECT_OVERVIEW.md.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.database import Base
@@ -27,6 +27,11 @@ class PacketLog(Base):
     src_port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     dst_port: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     payload_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # True nếu src_ip đang bị iptables DROP — packet đến NIC nhưng kernel hủy, app không bị ảnh hưởng
+    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    # Routine traffic classification (noise filter)
+    is_routine: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    routine_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class AlertHistory(Base):

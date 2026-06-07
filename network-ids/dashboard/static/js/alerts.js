@@ -1,4 +1,17 @@
 // ---------------------------------------------------------------------------
+// Shared timestamp formatter — YYYY-MM-DD HH:MM:SS
+// ---------------------------------------------------------------------------
+function formatTS(isoStr) {
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr; // fallback if unparseable
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // DSH-02  Alert feed (initial REST load + live SocketIO append)
 // ---------------------------------------------------------------------------
 const alertList = document.getElementById("alertFeed")
@@ -10,7 +23,7 @@ function renderAlert(a) {
     <span class="badge badge-${sev}">${a.severity}</span>
     <strong>${a.threat_type}</strong>
     <span>${a.src_ip}</span>
-    <span class="ts">${new Date(a.timestamp).toLocaleTimeString()}</span>
+    <span class="ts">${formatTS(a.timestamp)}</span>
     <span style="color: var(--muted); margin-left: auto;">${a.details ?? ""}</span>
   `
   alertList.prepend(li)
@@ -44,7 +57,7 @@ async function refreshIPList() {
     tr.innerHTML = `
       <td>${x.ip_address}</td>
       <td>${x.list_type}</td>
-      <td>${new Date(x.added_at).toLocaleString()}</td>
+      <td>${formatTS(x.added_at)}</td>
       <td>${x.reason ?? ""}</td>
       <td><button data-ip="${x.ip_address}" class="del">Remove</button></td>
     `
@@ -74,19 +87,29 @@ ipTableBody.addEventListener("click", async (e) => {
 refreshIPList()
 
 // ---------------------------------------------------------------------------
-// DSH-05  Packet log viewer with pagination + CSV export link
+// DSH-05  Packet log viewer with pagination, CSV export, and routine filter
 // ---------------------------------------------------------------------------
 const logForm = document.getElementById("logFilters")
 const logBody = document.querySelector("#logTable tbody")
 const pageInfo = document.getElementById("pageInfo")
 const csvLink = document.getElementById("csvExport")
-const logState = { page: 1, ip: "", proto: "" }
+const showRoutineCheckbox = document.getElementById("showRoutine")
+const logState = { page: 1, ip: "", proto: "", showRoutine: false }
+
+// Toggle routine traffic visibility
+showRoutineCheckbox.addEventListener("change", () => {
+  logState.showRoutine = showRoutineCheckbox.checked
+  logState.page = 1
+  refreshLogs()
+})
 
 function logQueryString() {
   const p = new URLSearchParams()
   p.set("page", logState.page)
   if (logState.ip) p.set("ip", logState.ip)
   if (logState.proto) p.set("proto", logState.proto)
+  // Only send show_routine when explicitly enabled
+  p.set("show_routine", logState.showRoutine ? "true" : "false")
   return p.toString()
 }
 
@@ -97,11 +120,21 @@ async function refreshLogs() {
     logBody.innerHTML = ""
     for (const row of data.items) {
       const tr = document.createElement("tr")
+
+      // Routine traffic: muted style + badge
+      if (row.is_routine) {
+        tr.className = "routine-row"
+      }
+
+      const routineBadge = row.is_routine
+        ? `<span class="badge badge-routine" title="${row.routine_reason || 'Routine traffic'}"">Routine</span> `
+        : ""
+
       tr.innerHTML = `
-        <td>${new Date(row.timestamp).toLocaleTimeString()}</td>
+        <td>${formatTS(row.timestamp)}</td>
         <td>${row.src_ip}</td>
         <td>${row.dst_ip}</td>
-        <td>${row.protocol}</td>
+        <td>${routineBadge}${row.protocol}</td>
         <td>${row.src_port ?? ""}</td>
         <td>${row.dst_port ?? ""}</td>
         <td>${row.payload_size ?? ""}</td>

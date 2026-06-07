@@ -52,14 +52,33 @@ const protocolChart = new Chart(protocolCtx, {
   },
   options: { plugins: { legend: { position: 'right' } } },
 });
+const protocolEmpty = document.getElementById('protocolEmpty');
+
 async function refreshProtocol() {
   try {
     const r = await fetch('/api/stats/protocol');
     const data = await r.json();
-    protocolChart.data.labels = Object.keys(data);
+    const keys = Object.keys(data);
+
+    if (keys.length === 0) {
+      // No packets in the last 5 minutes — show placeholder, hide chart
+      console.log('[DSH-04] No protocol data in last 5 minutes');
+      protocolChart.data.labels = [];
+      protocolChart.data.datasets[0].data = [];
+      protocolChart.update();
+      protocolEmpty.style.display = 'block';
+      return;
+    }
+
+    // Data available — hide placeholder, update chart
+    console.log('[DSH-04] Protocol data:', data);
+    protocolEmpty.style.display = 'none';
+    protocolChart.data.labels = keys;
     protocolChart.data.datasets[0].data = Object.values(data);
     protocolChart.update();
-  } catch (e) { console.error('refreshProtocol', e); }
+  } catch (e) {
+    console.error('refreshProtocol failed:', e);
+  }
 }
 refreshProtocol();
 setInterval(refreshProtocol, 5000);
