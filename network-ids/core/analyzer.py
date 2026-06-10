@@ -42,6 +42,10 @@ class Analyzer:
 
         # DET-04: src_ip -> [bucket_epoch_second, count_in_bucket]
         self.flood_counter: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        # DET-04 Global: [bucket_epoch_second, count_in_bucket]
+        self.global_flood_counter: list[int] = [0, 0]
+        # DET-04 Global: src_ip -> count in current second
+        self.global_flood_ips: dict[str, int] = {}
 
         # DET-05: src_ip -> deque[(timestamp, dst_ip)]
         self.ping_sweep: dict[str, Deque[tuple[float, str]]] = defaultdict(deque)
@@ -63,6 +67,12 @@ class Analyzer:
                 self._detect_brute_force(meta, alerts)
             elif proto == "ICMP":
                 self._detect_ping_sweep(meta, alerts)
+            elif proto == "ARP":
+                # DET-03 ARP Spoofing
+                self._detect_arp_spoof(meta, alerts)
+                # DET-05 Ping Sweep can also be done via ARP requests (nmap -sn)
+                if not meta.get("is_arp_reply"):
+                    self._detect_ping_sweep(meta, alerts)
         return [a for a in alerts if self._allow(a)]
 
     # Public: remove all cooldown entries for a given IP so it can be re-detected
@@ -191,6 +201,8 @@ class Analyzer:
             return
 
         bucket = int(time.time())
+
+        # 1. Per-IP Flood Detection
         state = self.flood_counter[src]
         # Reset counter when we roll into a new 1-second bucket.
         if state[0] != bucket:
@@ -210,6 +222,32 @@ class Analyzer:
                     "details": f"{state[1]} pps from {src}",
                 }
             )
+
+        # 2. Global / Spoofed / Multiple Source Flood Detection
+        g_state = self.global_flood_counter
+        if g_state[0] != bucket:
+            g_state[0] = bucket
+            g_state[1] = 0
+            self.global_flood_ips.clear()
+            self._flood_active.discard("Spoofed/Multiple")
+        g_state[1] += 1
+        self.global_flood_ips[src] = self.global_flood_ips.get(src, 0) + 1
+
+        if g_state[1] >= config.GLOBAL_FLOOD_RATE_THRESHOLD:
+            # Check if there are multiple unique source IPs in this second.
+            # If so, it's a spoofed/distributed attack.
+            unique_ips = len(self.global_flood_ips)
+            if unique_ips >= 5 and "Spoofed/Multiple" not in self._flood_active:
+                self._flood_active.add("Spoofed/Multiple")
+                out.append(
+                    {
+                        "timestamp": datetime.utcnow(),
+                        "src_ip": "Spoofed/Multiple",
+                        "threat_type": "FLOOD",
+                        "severity": "CRITICAL",
+                        "details": f"Spoofed/Multiple source SYN flood (total {g_state[1]} pps across {unique_ips} IPs)",
+                    }
+                )
 
     # ---------------------------- DET-05 ----------------------------
     def _detect_ping_sweep(self, meta: dict, out: list[dict]) -> None:

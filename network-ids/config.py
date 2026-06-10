@@ -49,14 +49,16 @@ PORT_SCAN_WINDOW_SEC = 5
 # ---------------------------------------------------------------------------
 # DET-02 Brute Force
 # ---------------------------------------------------------------------------
-BRUTE_FORCE_THRESHOLD = 20
-BRUTE_FORCE_WINDOW_SEC = 10
+BRUTE_FORCE_THRESHOLD = 5
+BRUTE_FORCE_WINDOW_SEC = 15
 BRUTE_FORCE_PORTS = [22, 21]  # auth-only ports; HTTP floods handled by DET-04
 
 # ---------------------------------------------------------------------------
 # DET-04 Flood / mini-DDoS
 # ---------------------------------------------------------------------------
-FLOOD_PACKET_RATE_THRESHOLD = 500  # packets per second from one source IP
+FLOOD_PACKET_RATE_THRESHOLD = 150  # packets per second from one source IP
+GLOBAL_FLOOD_RATE_THRESHOLD = 250  # total incoming packets per second targeting VPS_IP
+
 
 # ---------------------------------------------------------------------------
 # DET-05 Ping Sweep

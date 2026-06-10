@@ -12,6 +12,7 @@ Flow on each alert:
   4. Push alert dict over SocketIO so the dashboard updates live (RES-01).
 """
 
+import ipaddress
 import subprocess
 import threading
 from datetime import datetime
@@ -22,6 +23,15 @@ from sqlalchemy import select
 import config
 from db.database import session_scope
 from db.models import AlertHistory, IPList
+
+
+def _is_valid_ip(ip: str) -> bool:
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
 
 
 SocketEmit = Callable[[dict], None]
@@ -107,6 +117,10 @@ class Responder:
             self._rate_limited.discard(ip)
 
     def _apply_block(self, ip: str, reason: str = "auto-blocked") -> None:
+        if not _is_valid_ip(ip):
+            print(f"[responder] skip iptables block for non-IP: {ip}")
+            return
+
         with self._lock:
             if ip in self.blocked_ips:
                 return
@@ -146,6 +160,10 @@ class Responder:
             print(f"[responder] DB write for auto-block {ip} failed: {e}")
 
     def _apply_rate_limit(self, ip: str) -> None:
+        if not _is_valid_ip(ip):
+            print(f"[responder] skip iptables rate limit for non-IP: {ip}")
+            return
+
         with self._lock:
             if ip in self._rate_limited:
                 return

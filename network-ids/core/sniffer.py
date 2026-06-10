@@ -71,10 +71,10 @@ class PacketSniffer:
             f"dst host {ip}" for ip in config.IGNORE_DST_IPS
         )
         bpf = (
-            f"not port {config.FLASK_PORT}"
+            f"arp or (not port {config.FLASK_PORT}"
             f" and not src host {config.VPS_IP}"
             f" and not ({noise_udp})"
-            f" and not ({noise_dst})"
+            f" and not ({noise_dst}))"
         )
         sniff(
             iface=config.NETWORK_INTERFACE,
@@ -139,8 +139,6 @@ class PacketSniffer:
                 "is_routine": is_routine,
                 "routine_reason": routine_reason,
             })
-            if len(self._buffer) >= config.BULK_INSERT_BATCH_SIZE:
-                self._flush_locked()
 
     # ------------------------------------------------------------------
     # routine traffic classification (noise filter)
@@ -247,15 +245,21 @@ class PacketSniffer:
     # ------------------------------------------------------------------
     def _flush_loop(self) -> None:
         while not self._stop.is_set():
-            time.sleep(config.FLUSH_INTERVAL_SEC)
+            time.sleep(0.1)  # Poll frequently to check buffer size and elapsed time
+            should_flush = False
             with self._buffer_lock:
-                if self._buffer and (time.time() - self._last_flush) >= config.FLUSH_INTERVAL_SEC:
-                    self._flush_locked()
+                if self._buffer:
+                    elapsed = time.time() - self._last_flush
+                    if len(self._buffer) >= config.BULK_INSERT_BATCH_SIZE or elapsed >= config.FLUSH_INTERVAL_SEC:
+                        should_flush = True
+            if should_flush:
+                self._flush_unlocked()
 
-    def _flush_locked(self) -> None:
-        rows = self._buffer
-        self._buffer = []
-        self._last_flush = time.time()
+    def _flush_unlocked(self) -> None:
+        with self._buffer_lock:
+            rows = self._buffer
+            self._buffer = []
+            self._last_flush = time.time()
         if not rows:
             return
         try:
