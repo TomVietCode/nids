@@ -1,10 +1,10 @@
 """
-Detection engine. Implements DET-01..DET-05 from PROJECT_OVERVIEW.md.
+Detection engine. Implements DET-01..DET-05.
 
 Each call to Analyzer.process(pkt, meta) returns a list of alert dicts.
 The caller (sniffer) hands them to the Responder for persistence and action.
 
-Alert dict shape (consumed by RES-01):
+Alert dict shape:
     {
         "timestamp":   datetime,
         "src_ip":      str,
@@ -63,8 +63,6 @@ class Analyzer:
                 self._detect_brute_force(meta, alerts)
             elif proto == "ICMP":
                 self._detect_ping_sweep(meta, alerts)
-            elif proto == "ARP":
-                self._detect_arp_spoof(meta, alerts)
         return [a for a in alerts if self._allow(a)]
 
     # Public: remove all cooldown entries for a given IP so it can be re-detected

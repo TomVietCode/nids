@@ -38,11 +38,11 @@ class PacketSniffer:
         self,
         analyzer: Analyzer,
         alert_sink: Optional[AlertSink] = None,
-        blocked_ips: Optional[set] = None,  # tham chiếu đến Responder.blocked_ips
+        blocked_ips: Optional[set] = None,  # Reference to Responder.blocked_ips
     ) -> None:
         self.analyzer = analyzer
         self.alert_sink = alert_sink
-        # Dùng set của Responder để biết IP nào đang bị iptables DROP
+        # Use Responder's set to know which IPs are being iptables DROP
         self._blocked_ips: set = blocked_ips if blocked_ips is not None else set()
 
         self._buffer: list[dict] = []
@@ -64,12 +64,6 @@ class PacketSniffer:
     # capture loop
     # ------------------------------------------------------------------
     def _capture_loop(self) -> None:
-        # BPF filter chạy ở kernel level (hiệu quả nhất, trước khi vào Python).
-        # Loại bỏ:
-        #   - port Flask (5000) để tránh log traffic API của chính mình
-        #   - traffic đi ra từ VM (src = VPS_IP) vì ta chỉ monitor inbound threats
-        #   - các UDP port hệ thống: NTP(123), mDNS(5353), SSDP(1900), Spotify(57621)
-        #   - multicast/broadcast destination không phải threat thật
         noise_udp = " or ".join(
             f"udp port {p}" for p in config.IGNORE_UDP_PORTS
         )
@@ -95,22 +89,21 @@ class PacketSniffer:
         if meta is None:
             return
 
-        # Python-level filter (belt-and-suspenders sau BPF).
-        # Lọc theo src IP (gateway VMware, chính VM) và dst IP (multicast/broadcast).
+        # Filter by src IP (VMware gateway, VM itself) and dst IP (multicast/broadcast).
         if meta["src_ip"] in config.IGNORE_IPS:
             return
         if meta["dst_ip"] in config.IGNORE_DST_IPS:
             return
-        # Bỏ qua UDP noise port nếu BPF không catch được (ví dụ ARP encapsulated)
+        # Ignore UDP noise port if BPF cannot catch it (e.g., ARP encapsulated)
         if (
             meta["protocol"] == "UDP"
             and meta.get("dst_port") in config.IGNORE_UDP_PORTS
         ):
             return
 
-        # Kiểm tra xem src_ip có đang bị iptables DROP không.
-        # Nếu có: chỉ log với is_blocked=True, bỏ qua detection —
-        # vì IP này đã xử lý xong, alert thêm chỉ là noise.
+        # Check if src_ip is being iptables DROP.
+        # If yes: only log with is_blocked=True, ignore detection —
+        # because this IP has been processed, further alerts are just noise.
         is_blocked = meta["src_ip"] in self._blocked_ips
 
         has_alerts = False

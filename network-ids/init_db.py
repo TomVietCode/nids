@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 
 import config
 from db.database import engine, Base
-import db.models  # noqa: F401  (import side-effect: registers models on Base)
+import db.models 
 
 
 def main() -> int:

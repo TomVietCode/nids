@@ -11,29 +11,25 @@ db/database.py, api/*, main.py.
 # Network / server
 # ---------------------------------------------------------------------------
 NETWORK_INTERFACE = "ens33"
-VPS_IP = "192.168.68.128"       # IP thực của VM, dùng để filter self-traffic
+VPS_IP = "192.168.68.128"       # VM IP, filter self-traffic
 
-# VMware NAT gateway thường là .1 hoặc .2 trong subnet của VM
-VMWARE_GATEWAY_IP = "192.168.68.2"   # gateway NAT của VMware
-VMWARE_HOST_IP    = "192.168.68.1"   # host-only adapter của VMware trên Windows
+# VMware NAT gateway
+VMWARE_GATEWAY_IP = "192.168.68.2"   # gateway NAT
+VMWARE_HOST_IP    = "192.168.68.1"   # host-only adapter
 
-# Toàn bộ IP trong set này sẽ bị bỏ qua (không log, không detect)
 IGNORE_IPS = {
-    VPS_IP,             # traffic của chính VM
+    VPS_IP,             # traffic of VM
     VMWARE_GATEWAY_IP,  # VMware NAT gateway (ARP, DHCP, routing...)
     VMWARE_HOST_IP,     # VMware host-only interface
 }
 
-# Bỏ qua multicast/broadcast protocol dùng cho service discovery nội bộ.
-# Các địa chỉ này không phải tấn công, chỉ là noise từ VMware và Windows host.
 IGNORE_DST_IPS = {
     "224.0.0.251",      # mDNS multicast
     "239.255.255.250",  # SSDP/UPnP multicast
-    "255.255.255.255",  # broadcast thông thường
-    f"{'.'.join(VPS_IP.split('.')[:3])}.255",  # broadcast của subnet VM
+    "255.255.255.255",  # broadcast
+    f"{'.'.join(VPS_IP.split('.')[:3])}.255",  # subnet VM broadcast
 }
 
-# Bỏ qua các port dịch vụ hệ thống không liên quan đến bảo mật
 IGNORE_UDP_PORTS = {
     123,    # NTP (time sync)
     5353,   # mDNS
